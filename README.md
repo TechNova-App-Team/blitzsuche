@@ -4,6 +4,14 @@
 
 > *Blitzsuche* is German for "lightning search". The interface is in German.
 
+![Blitzsuche search results for "deploy": best match, grouped results and preview pane](docs/screenshot-deploy.png)
+
+| Recent items | Apps and documents |
+|---|---|
+| ![Recent items view](docs/screenshot-home.png) | ![Search for "rech" finds the Calculator app, invoices and files](docs/screenshot-rech.png) |
+
+<sub>Screenshots use example data.</sub>
+
 Windows Search only looks inside its own index, so a lot of files (scripts, `.bat` files, project folders, anything outside your libraries) never show up. Blitzsuche reads the NTFS file table directly, like *Everything* does. It indexes millions of files in a few seconds and answers every keystroke in milliseconds.
 
 ## Features
