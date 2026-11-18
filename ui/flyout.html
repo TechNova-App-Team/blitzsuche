@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Blitzsuche</title>
+<style>
+:root {
+  --tint: rgba(32, 32, 32, 0.35);
+  --text: #ffffff;
+  --text2: rgba(255, 255, 255, 0.786);
+  --text3: rgba(255, 255, 255, 0.544);
+  --hover: rgba(255, 255, 255, 0.0605);
+  --press: rgba(255, 255, 255, 0.0419);
+  --sel: rgba(255, 255, 255, 0.0837);
+  --tile: rgba(255, 255, 255, 0.0605);
+  --card: rgba(255, 255, 255, 0.0326);
+  --line: rgba(255, 255, 255, 0.0837);
+  --accent: #60cdff;
+  --ui: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --glyph: "Segoe Fluent Icons", "Segoe MDL2 Assets";
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  color: var(--text); font: 14px/20px var(--ui);
+  user-select: none; cursor: default;
+  -webkit-font-smoothing: subpixel-antialiased;
+}
+html { background: transparent; }
+body { background: var(--tint); }
+
+#panel { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 24px 32px 20px; }
+#panel.in { animation: rise 0.28s cubic-bezier(0.1, 0.9, 0.2, 1); }
+@keyframes rise { from { transform: translateY(28px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #panel.in { animation: fade 0.12s linear; } @keyframes fade { from { opacity: 0; } } }
+
+.head { display: flex; align-items: center; justify-content: space-between; height: 36px; margin-bottom: 14px; flex: none; }
+h1 { font: 600 20px/28px var(--display); margin: 0; }
+.status { font-size: 12px; color: var(--text3); }
+
+.scroll { overflow-y: auto; overflow-x: hidden; min-height: 0; margin-right: -16px; padding-right: 12px; }
+.scroll::-webkit-scrollbar { width: 4px; }
+.scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 2px; }
+.scroll::-webkit-scrollbar-track { background: transparent; }
+
+.row {
+  position: relative; display: flex; align-items: center; gap: 12px;
+  height: 60px; margin: 0 -12px; padding: 0 12px; border-radius: 4px;
+}
+.row:hover { background: var(--hover); }
+.row:active { background: var(--press); }
+.row.sel { background: var(--sel); }
+.row.sel::before {
+  content: ""; position: absolute; left: 0; top: 50%; width: 3px; height: 16px;
+  margin-top: -8px; border-radius: 2px; background: var(--accent);
+}
+.tile {
+  width: 40px; height: 40px; flex: none; border-radius: 4px; background: var(--tile);
+  display: grid; place-items: center;
+}
+.tile img { width: 24px; height: 24px; }
+.txt { min-width: 0; flex: 1; }
+.t1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t2 { font-size: 12px; line-height: 16px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ago { margin-left: 16px; font-size: 12px; color: var(--text2); flex: none; }
+.x {
+  font-family: var(--glyph); font-size: 10px; width: 28px; height: 28px; border-radius: 4px;
+  display: none; place-items: center; color: var(--text2); flex: none;
+}
+.row:hover .x { display: grid; }
+.row:hover .x + .ago { display: none; }
+.x:hover { background: var(--hover); color: var(--text); }
+
+/* results */
+#res { display: flex; gap: 16px; flex: 1; min-height: 0; padding-top: 4px; }
+#left { flex: 1 1 0; }
+#right {
+  flex: 1 1 0; background: var(--card); border-radius: 8px; border: 1px solid rgba(255,255,255,0.04);
+  display: flex; flex-direction: column; align-items: center; padding: 32px 20px 16px; min-width: 0;
+  overflow-y: auto;
+}
+h2 { font: 600 14px/20px var(--ui); margin: 14px 0 4px; }
+h2:first-child { margin-top: 0; }
+.list .row { height: 40px; gap: 12px; }
+.list .tile { width: 24px; height: 24px; background: none; }
+.list .tile img { width: 20px; height: 20px; }
+.list .best { height: 64px; }
+.list .best .tile { width: 40px; height: 40px; }
+.list .best .tile img { width: 32px; height: 32px; }
+
+.pv-icon { width: 64px; height: 64px; display: grid; place-items: center; margin-bottom: 12px; }
+.pv-icon img { max-width: 64px; max-height: 64px; }
+.pv-name { font: 600 20px/28px var(--display); text-align: center; word-break: break-word; max-width: 100%; }
+.pv-type { color: var(--text2); margin-top: 2px; text-align: center; }
+.pv-loc { color: var(--text3); font-size: 12px; line-height: 16px; margin-top: 6px; text-align: center; word-break: break-all; max-width: 100%; }
+.pv-line { align-self: stretch; height: 1px; background: var(--line); margin: 20px 0 8px; flex: none; }
+.acts { align-self: stretch; }
+.act { display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 12px; border-radius: 4px; }
+.act:hover { background: var(--hover); }
+.act:active { background: var(--press); }
+.act i { font: normal 16px/1 var(--glyph); width: 16px; color: var(--text); }
+
+.empty { color: var(--text2); padding: 32px 0; text-align: center; }
+.empty b { display: block; font: 600 20px/28px var(--display); color: var(--text); margin-bottom: 6px; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <div class="head"><h1 id="title">Aktuelle Suchen</h1><span class="status" id="status"></span></div>
+  <div id="home" class="scroll"></div>
+  <div id="res" class="hidden">
+    <div id="left" class="scroll list"></div>
+    <div id="right"></div>
+  </div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const send = (m) => window.ipc.postMessage(JSON.stringify(m));
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const nf = new Intl.NumberFormat('de-DE');
+
+let flat = [], sel = 0, mode = 'home', lastNow = 0;
+
+function iconImg(it, size) {
+  const img = new Image();
+  img.decoding = 'async';
+  img.draggable = false;
+  const key = (it.k === 'app' ? 'app:' : 'f:') + it.id;
+  img.src = '/icon?s=' + size + '&k=' + encodeURIComponent(key);
+  img.onerror = () => { img.style.visibility = 'hidden'; };
+  return img;
+}
+
+function ago(t) {
+  const s = Math.max(0, Math.floor(Date.now() / 1000) - t);
+  if (s < 60) return 'Gerade eben';
+  const m = Math.floor(s / 60); if (m < 60) return m === 1 ? '1 Minute zuvor' : m + ' Minuten zuvor';
+  const h = Math.floor(m / 60); if (h < 24) return h === 1 ? '1 Stunde zuvor' : h + ' Stunden zuvor';
+  const d = Math.floor(h / 24); return d === 1 ? '1 Tag zuvor' : d + ' Tage zuvor';
+}
+
+function statusText(st) {
+  if (st.pending > 0) return 'Laufwerke werden eingelesen … ' + nf.format(st.count);
+  return nf.format(st.count) + ' Dateien und Ordner';
+}
+
+function open(it, a) { send({ t: 'open', it, a: a || 'open' }); }
+
+function canAdmin(it) {
+  if (it.k === 'app') return true;
+  return /\.(exe|bat|cmd|msi|lnk)$/i.test(it.id);
+}
+
+function home(st) {
+  mode = 'home';
+  if (st.accent) document.documentElement.style.setProperty('--accent', `color-mix(in srgb, ${st.accent} 55%, white)`);
+  $('title').textContent = 'Aktuelle Suchen';
+  $('title').parentElement.classList.remove('hidden');
+  $('status').textContent = statusText(st);
+  $('res').classList.add('hidden');
+  const box = $('home');
+  box.classList.remove('hidden');
+  box.replaceChildren();
+  flat = st.recent || [];
+  sel = -1;
+  if (!flat.length) {
+    const e = el('div', 'empty');
+    e.append(el('b', null, 'Alles finden, auf jedem Laufwerk'));
+    e.append(document.createTextNode('Tipp einen Namen ein. Was du öffnest, erscheint hier.'));
+    box.append(e);
+    return;
+  }
+  flat.forEach((it, i) => {
+    const r = el('div', 'row');
+    const tile = el('div', 'tile'); tile.append(iconImg(it, 48));
+    const txt = el('div', 'txt');
+    txt.append(el('div', 't1', it.name));
+    txt.append(el('div', 't2', it.k === 'app' ? (it.sub || 'App') : (it.loc || it.sub)));
+    const x = el('div', 'x', ''); x.title = 'Aus der Liste entfernen';
+    x.addEventListener('click', (ev) => { ev.stopPropagation(); send({ t: 'forget', id: it.id }); r.remove(); });
+    r.append(tile, txt, x, el('div', 'ago', ago(it.t)));
+    r.addEventListener('click', () => open(it));
+    r.dataset.i = i;
+    box.append(r);
+  });
+}
+
+function results(res) {
+  mode = 'res';
+  $('home').classList.add('hidden');
+  $('title').parentElement.classList.add('hidden');
+  $('res').classList.remove('hidden');
+  const left = $('left');
+  left.replaceChildren();
+  left.scrollTop = 0;
+  flat = [];
+  if (!res.best) {
+    $('right').classList.add('hidden');
+    const e = el('div', 'empty');
+    e.append(el('b', null, 'Nichts gefunden für „' + res.q + '“'));
+    e.append(document.createTextNode(res.pending > 0
+      ? 'Die Laufwerke werden noch eingelesen. Versuch es gleich nochmal.'
+      : 'Prüf die Schreibweise oder such nach einem Teil des Namens.'));
+    left.append(e);
+    return;
+  }
+  $('right').classList.remove('hidden');
+  const add = (it, best) => {
+    const i = flat.length;
+    flat.push(it);
+    const r = el('div', 'row' + (best ? ' best' : ''));
+    const tile = el('div', 'tile'); tile.append(iconImg(it, best ? 64 : 32));
+    const txt = el('div', 'txt');
+    txt.append(el('div', 't1', it.name));
+    const sub = best ? it.sub : (it.k === 'app' ? '' : it.loc);
+    if (sub) txt.append(el('div', 't2', sub));
+    r.append(tile, txt);
+    r.dataset.i = i;
+    r.addEventListener('click', () => open(it));
+    r.addEventListener('mouseenter', () => { if (sel !== i) { sel = i; mark(false); preview(); } });
+    left.append(r);
+  };
+  left.append(el('h2', null, 'Höchste Übereinstimmung'));
+  add(res.best, true);
+  for (const g of res.groups) {
+    left.append(el('h2', null, g.title));
+    g.items.forEach((it) => add(it, false));
+  }
+  sel = 0;
+  mark(false);
+  preview();
+}
+
+function mark(scroll) {
+  const box = mode === 'home' ? $('home') : $('left');
+  box.querySelectorAll('.row').forEach((r) => r.classList.toggle('sel', +r.dataset.i === sel));
+  if (scroll) {
+    const r = box.querySelector('.row.sel');
+    if (r) r.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function preview() {
+  const it = flat[sel];
+  const p = $('right');
+  p.replaceChildren();
+  if (!it) return;
+  const ic = el('div', 'pv-icon'); ic.append(iconImg(it, 96)); p.append(ic);
+  p.append(el('div', 'pv-name', it.name));
+  p.append(el('div', 'pv-type', it.sub || (it.k === 'dir' ? 'Dateiordner' : 'Datei')));
+  if (it.k !== 'app') p.append(el('div', 'pv-loc', it.id));
+  p.append(el('div', 'pv-line'));
+  const acts = el('div', 'acts');
+  const act = (glyph, label, a) => {
+    const r = el('div', 'act'); const i = el('i', null, glyph);
+    r.append(i, el('span', null, label));
+    r.addEventListener('click', () => {
+      open(it, a);
+      if (a === 'copy') { r.lastChild.textContent = 'Pfad kopiert'; setTimeout(() => { r.lastChild.textContent = label; }, 1400); }
+    });
+    acts.append(r);
+  };
+  act('', it.k === 'dir' ? 'Ordner öffnen' : 'Öffnen', 'open');
+  if (canAdmin(it)) act('', 'Als Administrator ausführen', 'admin');
+  if (it.k !== 'app') {
+    act('', 'Dateispeicherort öffnen', 'folder');
+    act('', 'Pfad kopieren', 'copy');
+  }
+  p.append(acts);
+}
+
+function key(m) {
+  if (!flat.length) return;
+  const n = flat.length;
+  switch (m.k) {
+    case 'ArrowDown': sel = sel < 0 ? 0 : Math.min(n - 1, sel + 1); break;
+    case 'ArrowUp': sel = Math.max(0, sel - 1); break;
+    case 'PageDown': sel = Math.min(n - 1, Math.max(0, sel) + 8); break;
+    case 'PageUp': sel = Math.max(0, sel - 8); break;
+    case 'Enter': {
+      const it = flat[Math.max(0, sel)];
+      if (!it) return;
+      open(it, m.ctrl && m.shift ? 'admin' : m.ctrl ? 'folder' : 'open');
+      return;
+    }
+    default: return;
+  }
+  mark(true);
+  if (mode === 'res') preview();
+}
+
+// ---- keys arrive from the search box (it owns the keyboard) ----
+let shownQ = '', pendingEnter = null;
+window.onerror = (m, s, l) => send({ t: 'err', m: String(m), l });
+
+function onKey(m) {
+  if (m.k === 'Enter' && (m.v || '').trim() !== shownQ) {
+    // results for what was just typed are still on their way
+    pendingEnter = m;
+    return;
+  }
+  key(m);
+}
+
+function show(st) {
+  shownQ = ''; pendingEnter = null;
+  home(st);
+  const p = $('panel');
+  p.classList.remove('in'); void p.offsetWidth; p.classList.add('in');
+}
+
+function hide() { $('home').replaceChildren(); $('left').replaceChildren(); $('right').replaceChildren(); flat = []; }
+
+function onResults(res) {
+  shownQ = res.q;
+  results(res);
+  if (pendingEnter && (pendingEnter.v || '').trim() === shownQ) { const m = pendingEnter; pendingEnter = null; key(m); }
+}
+function onHome(st) { shownQ = ''; home(st); }
+
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+// the flyout never takes focus; keep mouse clicks from selecting text
+document.addEventListener('mousedown', (e) => e.preventDefault());
+window.B = { show, hide, home: onHome, results: onResults, key: onKey };
+</script>
+</body>
+</html>
