@@ -2,6 +2,10 @@
 name = "blitzsuche"
 version = "0.1.0"
 edition = "2024"
+description = "Instant file search for the Windows 11 taskbar - finds every file on every drive (NTFS MFT + USN journal)"
+license = "MIT"
+repository = "https://github.com/TechNova-App-Team/blitzsuche"
+keywords = ["windows", "search", "everything", "ntfs", "taskbar"]
 
 [dependencies]
 memchr = "2.8.3"
