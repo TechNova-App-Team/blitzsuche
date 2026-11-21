@@ -417,7 +417,52 @@ fn focus_pill(pill: &Window, pill_wv: &WebView) {
     let _ = pill_wv.evaluate_script("P.focus()");
 }
 
+/// Start menu (Ctrl+Esc / Win) still open? Its window would stay on top of
+/// the flyout, so close it with Esc and wait briefly until it is gone.
+fn close_start_menu() {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW};
+    use windows::Win32::UI::Input::KeyboardAndMouse::{INPUT, INPUT_0, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT, KEYEVENTF_KEYUP, SendInput, VK_ESCAPE};
+    use windows::Win32::UI::WindowsAndMessaging::GetClassNameW;
+    unsafe fn is_start(h: HWND) -> bool {
+        unsafe {
+            let mut cls = [0u16; 64];
+            let n = GetClassNameW(h, &mut cls) as usize;
+            if String::from_utf16_lossy(&cls[..n]) != "Windows.UI.Core.CoreWindow" {
+                return false;
+            }
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(h, Some(&mut pid));
+            let Ok(ph) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else { return false };
+            let mut buf = [0u16; 260];
+            let mut len = buf.len() as u32;
+            let ok = QueryFullProcessImageNameW(ph, PROCESS_NAME_WIN32, windows::core::PWSTR(buf.as_mut_ptr()), &mut len).is_ok();
+            let _ = CloseHandle(ph);
+            let path = String::from_utf16_lossy(&buf[..len as usize]).to_lowercase();
+            ok && (path.ends_with(r"\searchhost.exe") || path.ends_with(r"\startmenuexperiencehost.exe"))
+        }
+    }
+    unsafe {
+        let fg = GetForegroundWindow();
+        if !is_start(fg) {
+            return;
+        }
+        let key = |flags| INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: VK_ESCAPE, wScan: 0, dwFlags: flags, time: 0, dwExtraInfo: 0 } },
+        };
+        SendInput(&[key(KEYBD_EVENT_FLAGS(0)), key(KEYEVENTF_KEYUP)], size_of::<INPUT>() as i32);
+        for _ in 0..30 {
+            std::thread::sleep(Duration::from_millis(10));
+            if GetForegroundWindow() != fg {
+                break;
+            }
+        }
+    }
+}
+
 fn show(flyout: &Window, pill: &Window, fly_wv: &WebView, pill_wv: &WebView, state: &str) {
+    close_start_menu();
     let r = hook::rect().unwrap_or(windows::Win32::Foundation::RECT { left: 8, top: 1040, right: 228, bottom: 1072 });
     let (work, scale) = unsafe {
         let mon = MonitorFromPoint(POINT { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 }, MONITOR_DEFAULTTONEAREST);
