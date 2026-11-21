@@ -19,7 +19,7 @@ use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, Glo
 use windows::Win32::System::Ole::CF_UNICODETEXT;
 use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
 use windows::Win32::UI::Accessibility::{
-    CUIAutomation, IUIAutomation, TreeScope_Descendants, UIA_AutomationIdPropertyId,
+    CUIAutomation, IUIAutomation, IUIAutomationElement, TreeScope_Descendants, UIA_AutomationIdPropertyId,
 };
 use windows::Win32::UI::Shell::{
     BHID_EnumItems, FOLDERID_AppsFolder, IEnumShellItems, IShellItem, IShellItemImageFactory,
@@ -235,29 +235,44 @@ pub fn accent() -> String {
     format!("#{:02x}{:02x}{:02x}", v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff)
 }
 
-pub struct Uia(IUIAutomation);
+pub struct Uia {
+    uia: IUIAutomation,
+    // the search box element, kept so the frequent position check is one cheap call
+    cached: Option<IUIAutomationElement>,
+}
 
 impl Uia {
     pub fn new() -> Option<Uia> {
-        unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok().map(Uia) }
+        unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok().map(|uia| Uia { uia, cached: None }) }
+    }
+
+    fn find(&self) -> Option<IUIAutomationElement> {
+        unsafe {
+            let tray = FindWindowW(w!("Shell_TrayWnd"), PCWSTR::null()).ok()?;
+            let el = self.uia.ElementFromHandle(tray).ok()?;
+            let cond = self
+                .uia
+                .CreatePropertyCondition(UIA_AutomationIdPropertyId, &VARIANT::from("SearchButton"))
+                .ok()?;
+            el.FindFirst(TreeScope_Descendants, &cond).ok()
+        }
     }
 
     /// Screen rectangle (physical pixels) of the taskbar search box.
-    pub fn search_box(&self) -> Option<RECT> {
-        unsafe {
-            let tray = FindWindowW(w!("Shell_TrayWnd"), PCWSTR::null()).ok()?;
-            let el = self.0.ElementFromHandle(tray).ok()?;
-            let cond = self
-                .0
-                .CreatePropertyCondition(UIA_AutomationIdPropertyId, &VARIANT::from("SearchButton"))
-                .ok()?;
-            let found = el.FindFirst(TreeScope_Descendants, &cond).ok()?;
-            let r = found.CurrentBoundingRectangle().ok()?;
-            if r.right - r.left < 8 {
-                return None;
+    /// `refind` searches the taskbar again instead of trusting the cached element.
+    pub fn search_box(&mut self, refind: bool) -> Option<RECT> {
+        let read = |e: &IUIAutomationElement| {
+            let r = unsafe { e.CurrentBoundingRectangle() }.ok()?;
+            (r.right - r.left >= 8).then_some(r)
+        };
+        if !refind {
+            if let Some(r) = self.cached.as_ref().and_then(read) {
+                return Some(r);
             }
-            Some(r)
         }
+        // stale element (Explorer restarted) or periodic refresh
+        self.cached = self.find();
+        self.cached.as_ref().and_then(read)
     }
 }
 

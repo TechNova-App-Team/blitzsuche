@@ -112,17 +112,22 @@ fn main() {
     }
     std::thread::spawn(|| {
         shell::com_init();
-        let Some(uia) = shell::Uia::new() else { return };
+        let Some(mut uia) = shell::Uia::new() else { return };
+        // A centred taskbar shifts the search box whenever an app opens or
+        // closes, so check often: a stale rect lets clicks reach Windows Search
+        // and misplaces the pill.
+        let mut tick = 0u32;
         loop {
             if !hook::VISIBLE.load(Ordering::SeqCst) {
-                if let Some(r) = uia.search_box() {
+                if let Some(r) = uia.search_box(tick % 40 == 0) {
                     if hook::rect() != Some(r) {
                         save_rect(r);
                     }
                     hook::set_rect(r);
                 }
             }
-            std::thread::sleep(Duration::from_secs(3));
+            tick = tick.wrapping_add(1);
+            std::thread::sleep(Duration::from_millis(250));
         }
     });
 
