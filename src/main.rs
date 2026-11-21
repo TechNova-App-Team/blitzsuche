@@ -164,6 +164,7 @@ fn main() {
         .with_inner_size(PhysicalSize::new(220u32, 32u32))
         .build(&event_loop)
         .expect("Fenster");
+    no_fade(&pill);
 
     let mut ctx = WebContext::new(Some(recent::data_dir().join("webview")));
     let fly_wv = make_webview(&mut ctx, &flyout, "flyout.html", icon_tx.clone(), {
@@ -352,6 +353,16 @@ fn round_corners(w: &Window) {
             &pref as *const _ as *const c_void,
             size_of_val(&pref) as u32,
         );
+    }
+}
+
+/// The pill covers the native search box exactly; DWM's fade-in would show
+/// both "Suche" labels blended for a moment, so it appears instantly.
+fn no_fade(w: &Window) {
+    use windows::Win32::Graphics::Dwm::DWMWA_TRANSITIONS_FORCEDISABLED;
+    let off = windows::Win32::Foundation::BOOL(1);
+    unsafe {
+        let _ = DwmSetWindowAttribute(hwnd(w), DWMWA_TRANSITIONS_FORCEDISABLED, &off as *const _ as *const c_void, size_of_val(&off) as u32);
     }
 }
 
