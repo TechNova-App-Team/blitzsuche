@@ -30,7 +30,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
 use windows::Win32::UI::WindowsAndMessaging::{
     BringWindowToTop, GWL_EXSTYLE, GetForegroundWindow, GetWindowLongPtrW, GetWindowThreadProcessId, HWND_TOPMOST, SW_HIDE,
     SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, ShowWindow,
-    WS_EX_NOACTIVATE, SW_SHOW, SWP_SHOWWINDOW,
+    WS_EX_NOACTIVATE, SW_SHOW, SWP_SHOWWINDOW, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
 };
 use windows::core::{s, w};
 use wry::http::{Request, Response};
@@ -165,6 +165,8 @@ fn main() {
         .build(&event_loop)
         .expect("Fenster");
     no_fade(&pill);
+    tool_window(&flyout);
+    tool_window(&pill);
 
     let mut ctx = WebContext::new(Some(recent::data_dir().join("webview")));
     let fly_wv = make_webview(&mut ctx, &flyout, "flyout.html", icon_tx.clone(), {
@@ -395,6 +397,18 @@ fn acrylic(w: &Window) {
         let mut policy = AccentPolicy { state: 4, flags: 0, color: 0x7A1C1C1C, anim: 0 };
         let mut data = Data { attrib: 19, data: &mut policy as *mut _ as *mut c_void, size: size_of::<AccentPolicy>() };
         f(h, &mut data);
+    }
+}
+
+/// `with_skip_taskbar` only removes the taskbar button once; the shell adds it
+/// back when the window is shown again. The extra button shifts a centred
+/// taskbar, so the search box moves away from under the pill. Tool windows
+/// never get a taskbar button.
+fn tool_window(w: &Window) {
+    unsafe {
+        let h = hwnd(w);
+        let ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
+        SetWindowLongPtrW(h, GWL_EXSTYLE, (ex | WS_EX_TOOLWINDOW.0 as isize) & !(WS_EX_APPWINDOW.0 as isize));
     }
 }
 
